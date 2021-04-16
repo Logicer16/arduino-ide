@@ -4,7 +4,7 @@ import { open } from '@theia/core/lib/browser/opener-service';
 import { FileStat } from '@theia/filesystem/lib/common/files';
 import { CommandRegistry, CommandService } from '@theia/core/lib/common/command';
 import { WorkspaceCommandContribution as TheiaWorkspaceCommandContribution, WorkspaceCommands } from '@theia/workspace/lib/browser/workspace-commands';
-import { Sketch } from '../../../common/protocol';
+import { Sketch, SketchesService } from '../../../common/protocol';
 import { WorkspaceInputDialog } from './workspace-input-dialog';
 import { SketchesServiceClientImpl } from '../../../common/protocol/sketches-service-client-impl';
 import { SaveAsSketch } from '../../contributions/save-as-sketch';
@@ -18,6 +18,9 @@ export class WorkspaceCommandContribution extends TheiaWorkspaceCommandContribut
 
     @inject(CommandService)
     protected readonly commandService: CommandService;
+
+    @inject(SketchesService)
+    protected readonly sketchService: SketchesService;
 
     registerCommands(registry: CommandRegistry): void {
         super.registerCommands(registry);
@@ -99,6 +102,13 @@ export class WorkspaceCommandContribution extends TheiaWorkspaceCommandContribut
         if (!sketch) {
             return;
         }
+
+        // file belongs to another sketch, do not allow rename
+        const parentsketch = await this.sketchService.getSketchFolder(uri.toString());
+        if (parentsketch && parentsketch.uri !== sketch.uri) {
+            return;
+        }
+
         if (uri.toString() === sketch.mainFileUri) {
             const options = {
                 execOnlyIfTemp: false,

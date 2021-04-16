@@ -5,7 +5,9 @@ import { WorkspaceCommands } from '@theia/workspace/lib/browser';
 import { ContextMenuRenderer } from '@theia/core/lib/browser/context-menu-renderer';
 import { Disposable, DisposableCollection } from '@theia/core/lib/common/disposable';
 import { URI, SketchContribution, Command, CommandRegistry, MenuModelRegistry, KeybindingRegistry, TabBarToolbarRegistry, open } from './contribution';
-import { ArduinoMenus } from '../menu/arduino-menus';
+import { ArduinoMenus, PlaceholderMenuNode } from '../menu/arduino-menus';
+import { EditorManager } from '@theia/editor/lib/browser/editor-manager';
+import { SketchesServiceClientImpl } from '../../common/protocol/sketches-service-client-impl';
 
 @injectable()
 export class SketchControl extends SketchContribution {
@@ -18,6 +20,12 @@ export class SketchControl extends SketchContribution {
 
     @inject(ContextMenuRenderer)
     protected readonly contextMenuRenderer: ContextMenuRenderer;
+
+    @inject(EditorManager)
+    protected readonly editorManager: EditorManager;
+
+    @inject(SketchesServiceClientImpl)
+    protected readonly sketchesServiceClient: SketchesServiceClientImpl;
 
     protected readonly toDisposeBeforeCreateNewContextMenu = new DisposableCollection();
 
@@ -42,8 +50,42 @@ export class SketchControl extends SketchContribution {
 
                 const { mainFileUri, rootFolderFileUris } = await this.sketchService.loadSketch(sketch.uri);
                 const uris = [mainFileUri, ...rootFolderFileUris];
+
+                const currentSketch = await this.sketchesServiceClient.currentSketch();
+                const parentsketchUri = this.editorManager.currentEditor?.getResourceUri()?.toString();
+                const parentsketch = await this.sketchService.getSketchFolder(parentsketchUri || '');
+
+                // if the current file is in the current opened sketch, show extra menus
+                if (currentSketch && parentsketch && parentsketch.uri === currentSketch.uri && await this.allowRename(parentsketch.uri)) {
+                    this.menuRegistry.registerMenuAction(ArduinoMenus.SKETCH_CONTROL__CONTEXT__MAIN_GROUP, {
+                        commandId: WorkspaceCommands.FILE_RENAME.id,
+                        label: 'Rename',
+                        order: '1'
+                    });
+                    this.toDisposeBeforeCreateNewContextMenu.push(Disposable.create(() => this.menuRegistry.unregisterMenuAction(WorkspaceCommands.FILE_RENAME)));
+                } else {
+                    const renamePlaceholder = new PlaceholderMenuNode(ArduinoMenus.SKETCH_CONTROL__CONTEXT__MAIN_GROUP, 'Rename');
+                    this.menuRegistry.registerMenuNode(ArduinoMenus.SKETCH_CONTROL__CONTEXT__MAIN_GROUP, renamePlaceholder);
+                    this.toDisposeBeforeCreateNewContextMenu.push(Disposable.create(() => this.menuRegistry.unregisterMenuNode(renamePlaceholder.id)));
+                }
+
+                if (currentSketch && parentsketch && parentsketch.uri === currentSketch.uri && await this.allowDelete(parentsketch.uri)) {
+                    this.menuRegistry.registerMenuAction(ArduinoMenus.SKETCH_CONTROL__CONTEXT__MAIN_GROUP, {
+                        commandId: WorkspaceCommands.FILE_DELETE.id, // TODO: customize delete. Wipe sketch if deleting main file. Close window.
+                        label: 'Delete',
+                        order: '2'
+                    });
+                    this.toDisposeBeforeCreateNewContextMenu.push(Disposable.create(() => this.menuRegistry.unregisterMenuAction(WorkspaceCommands.FILE_DELETE)));
+                } else {
+                    const deletePlaceholder = new PlaceholderMenuNode(ArduinoMenus.SKETCH_CONTROL__CONTEXT__MAIN_GROUP, 'Delete');
+                    this.menuRegistry.registerMenuNode(ArduinoMenus.SKETCH_CONTROL__CONTEXT__MAIN_GROUP, deletePlaceholder);
+                    this.toDisposeBeforeCreateNewContextMenu.push(Disposable.create(() => this.menuRegistry.unregisterMenuNode(deletePlaceholder.id)));
+                }
+
                 for (let i = 0; i < uris.length; i++) {
                     const uri = new URI(uris[i]);
+
+                    // focus on the opened sketch
                     const command = { id: `arduino-focus-file--${uri.toString()}` };
                     const handler = { execute: () => open(this.openerService, uri) };
                     this.toDisposeBeforeCreateNewContextMenu.push(registry.registerCommand(command, handler));
@@ -71,16 +113,6 @@ export class SketchControl extends SketchContribution {
             commandId: WorkspaceCommands.NEW_FILE.id,
             label: 'New Tab',
             order: '0'
-        });
-        registry.registerMenuAction(ArduinoMenus.SKETCH_CONTROL__CONTEXT__MAIN_GROUP, {
-            commandId: WorkspaceCommands.FILE_RENAME.id,
-            label: 'Rename',
-            order: '1'
-        });
-        registry.registerMenuAction(ArduinoMenus.SKETCH_CONTROL__CONTEXT__MAIN_GROUP, {
-            commandId: WorkspaceCommands.FILE_DELETE.id, // TODO: customize delete. Wipe sketch if deleting main file. Close window.
-            label: 'Delete',
-            order: '2'
         });
 
         registry.registerMenuAction(ArduinoMenus.SKETCH_CONTROL__CONTEXT__NAVIGATION_GROUP, {
@@ -115,6 +147,14 @@ export class SketchControl extends SketchContribution {
             id: SketchControl.Commands.OPEN_SKETCH_CONTROL__TOOLBAR.id,
             command: SketchControl.Commands.OPEN_SKETCH_CONTROL__TOOLBAR.id
         });
+    }
+
+    protected async allowRename(uri: string) {
+        return true;
+    }
+
+    protected async allowDelete(uri: string) {
+        return true;
     }
 
 }

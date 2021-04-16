@@ -50,6 +50,7 @@ import { SketchesServiceClientImpl } from '../common/protocol/sketches-service-c
 import { SaveAsSketch } from './contributions/save-as-sketch';
 import { FileChangeType } from '@theia/filesystem/lib/browser';
 import { FrontendApplicationStateService } from '@theia/core/lib/browser/frontend-application-state';
+import { SketchbookWidgetContribution } from './widgets/sketchbook/sketchbook-widget-contribution';
 
 @injectable()
 export class ArduinoFrontendContribution implements FrontendApplicationContribution,
@@ -123,6 +124,9 @@ export class ArduinoFrontendContribution implements FrontendApplicationContribut
 
     @inject(SearchInWorkspaceFrontendContribution)
     protected readonly siwContribution: SearchInWorkspaceFrontendContribution;
+
+    @inject(SketchbookWidgetContribution)
+    protected readonly sketchbookWidgetContribution: SketchbookWidgetContribution;
 
     @inject(EditorMode)
     protected readonly editorMode: EditorMode;
@@ -215,7 +219,8 @@ export class ArduinoFrontendContribution implements FrontendApplicationContribut
             this.outlineContribution,
             this.problemContribution,
             this.scmContribution,
-            this.siwContribution] as Array<FrontendApplicationContribution>) {
+            this.siwContribution,
+            this.sketchbookWidgetContribution] as Array<FrontendApplicationContribution>) {
             if (viewContribution.initializeLayout) {
                 viewContribution.initializeLayout(app);
             }
